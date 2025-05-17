@@ -256,19 +256,29 @@ async def on_message(message):
         return
 
     is_dm = isinstance(message.channel, discord.DMChannel)
-    channel_id = str(message.channel.id) 
+    channel_id = str(message.channel.id)
+    msg_content_original = message.content # Simpan original untuk log
+    msg_content_stripped = msg_content_original.strip()
+    msg_content_lower = msg_content_stripped.lower()
 
-    # Logika untuk perintah !emma
-    if message.content.lower().startswith(f"{COMMAND_PREFIX}{BOT_NAME.lower()}"):
-        parts = message.content.split()
-        command_name_full = parts[0].lower() # e.g., !emma
+    command_trigger = f"{COMMAND_PREFIX}{BOT_NAME.lower()}"
+    print(f"Debug: Pesan diterima: '{msg_content_original}'. Trigger: '{command_trigger}'") # DEBUG LOG
+
+    # Logika untuk perintah !<bot_name>
+    if msg_content_lower.startswith(command_trigger):
+        print(f"Debug: Terdeteksi trigger perintah '{command_trigger}'") # DEBUG LOG
+        command_parts = msg_content_stripped.split()
+        # command_name_invoked = command_parts[0] # e.g. !emma atau !Emma
+
+        sub_command = None
+        if len(command_parts) > 1:
+            sub_command = command_parts[1].lower()
         
-        actual_command = None
-        if len(parts) > 1:
-            actual_command = parts[1].lower()
-        
-        # Jika hanya "!emma" atau "!emma help"
-        if actual_command is None or actual_command == "help":
+        print(f"Debug: Sub-perintah terdeteksi: '{sub_command}'") # DEBUG LOG
+
+        # Menangani "!emma" (tanpa sub-perintah) atau "!emma help"
+        if sub_command is None or sub_command == "help":
+            print(f"Debug: Menjalankan perintah HELP.") # DEBUG LOG
             help_text = f"**Yo, ini daftar perintah buat gue, {BOT_NAME.capitalize()}:**\n"
             for cmd, desc in EMMA_COMMANDS.items():
                 help_text += f"- `{COMMAND_PREFIX}{BOT_NAME.lower()} {cmd}`: {desc}\n"
@@ -276,13 +286,14 @@ async def on_message(message):
             await message.channel.send(help_text)
             return
 
-        elif actual_command == "time":
+        elif sub_command == "time":
+            print(f"Debug: Menjalankan perintah TIME.") # DEBUG LOG
             time_now = get_current_jakarta_time_str()
             await message.channel.send(f"di jakarta sekarang jam {time_now} nih, bro/sis.")
             return
             
-        elif actual_command == "status":
-            # Ini bisa dibuat lebih canggih, tapi untuk sekarang kita pakai respons statis dengan gaya Emma
+        elif sub_command == "status":
+            print(f"Debug: Menjalankan perintah STATUS.") # DEBUG LOG
             statuses = [
                 "lagi ngoprek kode biar makin pinter, jangan ganggu dulu kalo ga penting-penting amat.",
                 "baru abis nge-gym, lagi seger nih otaknya. mau nanya apa?",
@@ -293,40 +304,41 @@ async def on_message(message):
             await message.channel.send(random.choice(statuses))
             return
 
-        elif actual_command == "quote":
+        elif sub_command == "quote":
+            print(f"Debug: Menjalankan perintah QUOTE.") # DEBUG LOG
             await message.channel.send(f"oke nih dengerin: \"{random.choice(EMMA_QUOTES)}\" semoga mencerahkan ya.")
             return
             
         else:
-            await message.channel.send(f"hm, `{actual_command}`? kayaknya itu ga ada di daftar perintah gue deh. coba ketik `{COMMAND_PREFIX}{BOT_NAME.lower()} help` buat liat yang bener.")
+            print(f"Debug: Perintah tidak dikenali: '{sub_command}'.") # DEBUG LOG
+            await message.channel.send(f"hm, `{sub_command}`? kayaknya itu ga ada di daftar perintah gue deh. coba ketik `{COMMAND_PREFIX}{BOT_NAME.lower()} help` buat liat yang bener.")
             return
 
+    # Logika untuk panggilan nama atau DM (logika yang sudah ada sebelumnya)
     trigger_response = False
-    user_actual_input = message.content.strip()
+    user_actual_input = msg_content_stripped 
 
     if is_dm:
         trigger_response = True
-    else: 
-        if user_actual_input.lower().startswith(BOT_NAME.lower()):
-            # Cek apakah setelah nama bot ada spasi, koma, atau akhir string
-            # Ini untuk membedakan "emma tolong" dari "emmaline adalah..."
-            rest_of_message = user_actual_input[len(BOT_NAME):]
-            if not rest_of_message or rest_of_message.startswith((',', ' ', ':')):
-                user_actual_input = rest_of_message.lstrip(', :').strip()
-                if not user_actual_input : # Jika hanya "emma" atau "emma,"
-                    user_actual_input = "halo" # Anggap sapaan default
-                trigger_response = True
+    # Hanya proses panggilan nama jika BUKAN perintah !emma
+    elif msg_content_lower.startswith(BOT_NAME.lower()): 
+        rest_of_message = msg_content_stripped[len(BOT_NAME):]
+        if not rest_of_message or rest_of_message.startswith((',', ' ', ':')):
+            user_actual_input = rest_of_message.lstrip(', :').strip()
+            if not user_actual_input :
+                user_actual_input = "halo" 
+            trigger_response = True
 
     if trigger_response:
-        print(f"Pesan dari {message.author} untuk Emma: '{user_actual_input}' di {'DM' if is_dm else f'channel {message.channel} server {message.guild}'}")
+        print(f"Pesan dari {message.author} untuk Emma (via nama/DM): '{user_actual_input}' di {'DM' if is_dm else f'channel {message.channel} server {message.guild}'}")
         
-        if not user_actual_input.strip() and is_dm: 
+        if not user_actual_input.strip() and is_dm:
              await message.channel.send("hm kamu diem aja nih")
              return
         
         add_to_stm(channel_id, "user", user_actual_input)
 
-        async with message.channel.typing(): 
+        async with message.channel.typing():
             if not CHATBOT_API_KEY:
                 response_text = "duh api key buat ngobrol ke ai nya ga diset nih sori ya"
             else:
