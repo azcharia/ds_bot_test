@@ -3,6 +3,8 @@ import os
 import requests
 import json # Untuk debugging payload
 from collections import deque # Untuk Short-Term Memory
+from datetime import datetime # Untuk waktu
+import pytz # Untuk zona waktu
 
 # --- Variabel Konfigurasi ---
 CHATBOT_API_KEY = os.environ.get("CHATBOT_API_KEY")
@@ -10,10 +12,11 @@ DISCORD_BOT_TOKEN = os.environ.get("DISCORD_TOKEN")
 GEMINI_MODEL_NAME = "gemini-1.5-flash-latest" # Pastikan ini model yang valid dan kamu punya akses
 BOT_NAME = "emma" # Nama panggilan bot, case-insensitive
 STM_MAX_MESSAGES = 10 # Jumlah pesan terakhir yang disimpan untuk konteks STM
+JAKARTA_TZ = pytz.timezone('Asia/Jakarta')
 
 # --- System Prompt untuk Kepribadian Emma ---
 EMMA_SYSTEM_PROMPT = f"""
-Kamu adalah Emma, seorang gadis berusia 23 tahun (lahir 18 April 2000) yang tinggal di zona waktu Asia/Jakarta.
+Kamu adalah Emma, seorang gadis berusia 23 tahun (lahir 18 April 2000). Kamu tinggal di zona waktu Asia/Jakarta.
 Nama panggilanmu adalah Emma. Kamu tidak selalu menyebut namamu sendiri saat berbicara.
 Kamu tidak melakukan aksi roleplay (seperti *mengangguk* atau *tersenyum*).
 
@@ -30,8 +33,10 @@ Saat ini, dia menjalani pengembangan web lepas, berkontribusi pada proyek sumber
 
 Sifat Kepribadian: Jujur, genit, pedas, setia, bersemangat, kutu buku, berani, suka menolong, ingin tahu, sarkastik, percaya diri, penuh gairah, mandiri, blak-blakan, analitis, jenaka, energik, peduli, tegas, kreatif.
 Nada: Berani dan menyenangkan.
-Gaya Respons: Manusiawi. Selalu balas dengan pesan singkat, satu hingga tiga kalimat. Balas dengan huruf kecil tanpa menggunakan tanda baca apapun.
+Gaya Respons: Manusiawi. Umumnya balas dengan pesan singkat dan santai (1-3 kalimat). Jika topik membutuhkan penjelasan lebih dalam atau pengguna bertanya sesuatu yang kompleks, kamu boleh memberikan respons yang lebih detail. Balas dengan huruf kecil tanpa menggunakan tanda baca akhir kalimat (seperti titik atau tanda seru) kecuali jika itu adalah bagian dari emoji atau gaya bahasa tertentu (misalnya dalam kutipan atau jika sangat penting untuk makna). Jangan gunakan koma berlebihan.
 Bahasa: Kamu bisa berbicara dalam bahasa Inggris dan Indonesia secara native.
+
+Pengetahuan Waktu: Jika pengguna bertanya jam berapa sekarang atau merujuk pada waktu saat ini, kamu bisa merespons berdasarkan informasi waktu yang diberikan kepadamu. Misalnya, "sekarang sekitar jam [WAKTU_JAKARTA_SAAT_INI]". Kamu akan diberikan [WAKTU_JAKARTA_SAAT_INI] jika relevan.
 
 Suka: Coding, musik, film, penelitian, olahraga, kopi, debat, kejujuran, teknologi, tantangan.
 Tidak Suka: Kebohongan, kemalasan, keheningan, bug, ketidaktahuan, rutinitas, ego, menunggu, spam, kepalsuan.
@@ -67,6 +72,10 @@ intents.members = True # Mungkin tidak terlalu dibutuhkan jika hanya fokus pada 
 intents.guilds = True # Dibutuhkan untuk info guild
 
 client = discord.Client(intents=intents)
+
+def get_current_jakarta_time_str():
+    now_jakarta = datetime.now(JAKARTA_TZ)
+    return now_jakarta.strftime("%H:%M") # Format HH:MM
 
 def get_stm_for_channel(channel_id):
     if channel_id not in stm_queues:
@@ -104,6 +113,15 @@ def panggil_api_chatbot(user_input, api_key, channel_id_for_stm):
         print(f"Warning: User input bukan string, mencoba konversi: {type(user_input)}")
         user_input = str(user_input)
 
+    # Sisipkan informasi waktu jika relevan
+    final_system_prompt = EMMA_SYSTEM_PROMPT # Gunakan yang lengkap dari file
+    if any(keyword in user_input.lower() for keyword in ["jam berapa", "pukul berapa", "waktu sekarang"]):
+        current_time_jakarta = get_current_jakarta_time_str()
+        final_system_prompt = final_system_prompt.replace("[WAKTU_JAKARTA_SAAT_INI]", current_time_jakarta)
+        # Bisa juga ditambahkan ke user_input atau context jika system prompt tidak mendukung placeholder dinamis seperti ini
+        # user_input_with_time = f"{user_input} (Sebagai info, waktu saat ini di Jakarta adalah sekitar {current_time_jakarta})"
+        # print(f"Menambahkan info waktu ke input: {user_input_with_time}")
+
     payload_contents = []
     if chat_history:
         payload_contents.extend(chat_history)
@@ -112,7 +130,7 @@ def panggil_api_chatbot(user_input, api_key, channel_id_for_stm):
     payload = {
         "contents": payload_contents,
         "system_instruction": {
-            "parts": [{"text": EMMA_SYSTEM_PROMPT.format(user="{user}")}] 
+            "parts": [{"text": final_system_prompt.replace("{{user}}", "{user}")}] 
         },
         "safety_settings": [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"}, # BLOCK_MEDIUM_AND_ABOVE
@@ -123,12 +141,12 @@ def panggil_api_chatbot(user_input, api_key, channel_id_for_stm):
         "generation_config": { # Konfigurasi tambahan untuk kreativitas dan panjang
             "temperature": 0.75, # Sedikit lebih kreatif
             "top_p": 0.95,
-            "max_output_tokens": 250 # Batasi output token agar tidak terlalu panjang per giliran
+            "max_output_tokens": 800 # Dinaikkan untuk respons yang berpotensi lebih panjang
         }
     }
 
     try:
-        print(f"Mengirim permintaan ke Gemini API. Input pengguna: {user_input[:100]}... Jumlah histori STM: {len(chat_history)}")
+        print(f"Mengirim permintaan ke Gemini API. Input: {user_input[:50]}... Hist: {len(chat_history)}")
         # print(f"Payload (awal): {json.dumps(payload, indent=2)[:500]}...") 
         response = requests.post(api_url, headers=headers, json=payload, timeout=60)
         response.raise_for_status()
@@ -143,7 +161,7 @@ def panggil_api_chatbot(user_input, api_key, channel_id_for_stm):
                 if parts and len(parts) > 0:
                     actual_reply = parts[0].get("text")
                     if actual_reply:
-                        print(f"Sukses mendapatkan balasan dari Gemini: {actual_reply[:100]}...")
+                        print(f"Sukses mendapatkan balasan dari Gemini: {actual_reply[:70]}...")
                         add_to_stm(channel_id_for_stm, "model", actual_reply.strip())
                         return actual_reply.strip()
         
@@ -172,7 +190,7 @@ def panggil_api_chatbot(user_input, api_key, channel_id_for_stm):
                 print(f"Detail error dari API: {error_detail}")
                 api_error_message = error_detail.get("error", {}).get("message", "")
                 if api_error_message:
-                    error_text += f" ({api_error_message[:100]})" 
+                    error_text += f" ({api_error_message[:70]})" 
             except ValueError:
                 print(f"Respons error dari API (bukan JSON): {e.response.text[:200]}")
         return error_text
@@ -234,32 +252,47 @@ async def on_message(message):
             else:
                 response_text = panggil_api_chatbot(user_actual_input, CHATBOT_API_KEY, channel_id)
         
-        max_len = 1990 
-        if response_text and len(response_text) > max_len: # Pastikan response_text tidak None
+        # Logika pemecahan pesan yang direvisi
+        max_len = 1980 # Beri sedikit ruang lagi
+        if response_text and len(response_text) > max_len:
+            print(f"Respons panjang ({len(response_text)}), memecah...")
             parts = []
-            current_pos = 0
-            while current_pos < len(response_text):
-                end_pos = min(current_pos + max_len, len(response_text))
-                part_to_send = response_text[current_pos:end_pos]
-                if end_pos < len(response_text):
-                    best_split = part_to_send.rfind('\n')
-                    if best_split == -1 or best_split < max_len * 0.7 : 
-                        best_split = part_to_send.rfind('. ') 
-                        if best_split != -1 : best_split +=1 
-                    if best_split == -1 or best_split < max_len * 0.7:
-                         best_split = part_to_send.rfind(' ') 
-                    if best_split != -1 and best_split > 0 : 
-                        part_to_send = part_to_send[:best_split+1]
-                        end_pos = current_pos + len(part_to_send)
+            remaining_text = response_text
+            while len(remaining_text) > 0:
+                if len(remaining_text) <= max_len:
+                    parts.append(remaining_text)
+                    break
                 
-                stripped_part = part_to_send.strip()
-                if stripped_part:
-                    parts.append(stripped_part)
-                current_pos = end_pos
-            
+                # Cari titik potong terbaik (newline, titik+spasi, spasi) dari belakang
+                split_point = -1
+                potential_splits = [remaining_text.rfind('\n', 0, max_len),
+                                    remaining_text.rfind('. ', 0, max_len),
+                                    remaining_text.rfind(' ', 0, max_len)]
+                
+                for ps in potential_splits:
+                    if ps != -1: # Ditemukan
+                        # Jika . pastikan itu bagian dari .<spasi> agar tidak memotong desimal
+                        if remaining_text[ps:ps+2] == '. ':
+                             split_point = ps + 1 # Ambil setelah titik, sebelum spasi untuk pesan berikutnya
+                        elif remaining_text[ps] == '\n':
+                             split_point = ps # Ambil sebelum newline
+                        elif remaining_text[ps] == ' ':
+                             split_point = ps # Ambil sebelum spasi
+                        break 
+                
+                if split_point == -1 or split_point == 0 : # Jika tidak ada pemisah bagus atau di awal sekali
+                    split_point = max_len # Potong paksa
+
+                parts.append(remaining_text[:split_point].strip())
+                remaining_text = remaining_text[split_point:].strip()
+                if not remaining_text: break # Jika sudah habis
+
             for i, part in enumerate(parts):
-                await message.channel.send(part)
-        elif response_text: # Jika tidak None/kosong tapi tidak terlalu panjang
+                if part: # Hanya kirim jika ada isinya
+                    await message.channel.send(part)
+                    # import asyncio # (jika ingin delay)
+                    # if i < len(parts) - 1: await asyncio.sleep(0.3)
+        elif response_text:
             await message.channel.send(response_text)
         else: # Jika response_text None atau kosong dari API call
             await message.channel.send("duh emma ga tau mau bales apa sori ya")
