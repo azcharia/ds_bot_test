@@ -70,11 +70,6 @@ if %ERRORLEVEL% EQU 0 (
     echo Repository URL: https://github.com/%username%/%repo_name%
     echo ========================================
     echo.
-    echo Langkah selanjutnya untuk deployment ke Vercel:
-    echo 1. Buka https://vercel.com dan sign up/login
-    echo 2. Klik "New Project" dan import repository GitHub Anda
-    echo 3. Atur build settings dan deploy
-    echo.
 ) else (
     echo.
     echo Terjadi kesalahan saat push ke GitHub.
