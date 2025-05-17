@@ -140,7 +140,46 @@ async def on_message(message):
                 if response_text is None or response_text == "": # Jika API gagal atau tidak mengembalikan apa-apa
                     response_text = "Maaf, saya tidak bisa mendapatkan respons saat ini atau responsnya kosong."
             
-            await message.channel.send(f"{response_text}")
+            # Logika baru untuk mengirim pesan panjang dalam beberapa bagian
+            if len(response_text) > 2000:
+                print(f"Respons dari Gemini terlalu panjang ({len(response_text)} karakter). Membaginya menjadi beberapa pesan.")
+                parts = []
+                current_pos = 0
+                while current_pos < len(response_text):
+                    # Tentukan batas potong, usahakan tidak memotong di tengah kalimat/kata jika memungkinkan
+                    # Batas ideal adalah 2000, tapi kita ambil sedikit lebih kecil untuk aman
+                    end_pos = min(current_pos + 1990, len(response_text))
+                    
+                    # Jika kita belum mencapai akhir teks dan masih bisa mencari pemisah yang baik
+                    if end_pos < len(response_text):
+                        # Coba cari newline atau spasi terdekat dari belakang
+                        best_split = -1
+                        # Cari newline dulu dalam rentang tertentu dari end_pos
+                        temp_split_nl = response_text.rfind('\n', current_pos, end_pos)
+                        if temp_split_nl != -1 and temp_split_nl > current_pos : # Pastikan newline bukan di awal chunk
+                            best_split = temp_split_nl + 1 # Ambil setelah newline
+                        else:
+                            # Jika tidak ada newline, cari spasi
+                            temp_split_sp = response_text.rfind(' ', current_pos, end_pos)
+                            if temp_split_sp != -1 and temp_split_sp > current_pos: # Pastikan spasi bukan di awal chunk
+                                best_split = temp_split_sp + 1 # Ambil setelah spasi
+                        
+                        if best_split != -1 and best_split > current_pos: # Pastikan kita benar-benar memotong
+                            end_pos = best_split
+                        # Jika tidak ada pemisah yang baik, potong paksa di 1990 atau akhir teks
+
+                    part_to_send = response_text[current_pos:end_pos].strip()
+                    if part_to_send: # Hanya kirim jika ada isinya
+                        parts.append(part_to_send)
+                    current_pos = end_pos
+                
+                for part in parts:
+                    await message.channel.send(part)
+                    # import asyncio # Jika ingin delay, uncomment dan import di atas file
+                    # await asyncio.sleep(0.3) # Delay kecil antar pesan jika perlu
+            else:
+                # Jika respons tidak terlalu panjang, kirim seperti biasa
+                await message.channel.send(f"{response_text}")
 
     except Exception as e:
         print(f"Error saat memproses pesan: {e}")
