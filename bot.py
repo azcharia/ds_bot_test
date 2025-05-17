@@ -36,29 +36,37 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    print(f"Pesan dari {message.author}: {message.content} di channel {message.channel} server {message.guild}")
+    # Cek apakah pesan datang dari DM
+    is_dm = isinstance(message.channel, discord.DMChannel)
 
-    # Filter pesan: misalnya, bot hanya merespons jika di-mention atau ada kata kunci tertentu
-    # Contoh: respons jika bot di-mention
-    if client.user.mentioned_in(message):
-        try:
-            # Di sini kamu akan memanggil API chatbotmu
-            # Misalnya:
-            # response_text = panggil_api_chatbot(message.content, CHATBOT_API_KEY)
-            
-            # Untuk contoh ini, kita balas saja dengan pesan sederhana
-            user_message_cleaned = message.content.replace(f'<@!{client.user.id}>', '').replace(f'<@{client.user.id}>', '').strip() # Hapus mention bot dari pesan
-            
-            if not user_message_cleaned: # Jika hanya mention tanpa pesan lain
-                 await message.channel.send(f"Halo {message.author.mention}! Ada yang bisa saya bantu?")
+    print(f"Pesan dari {message.author}: {message.content} di {'DM' if is_dm else f'channel {message.channel} server {message.guild}'}")
+
+    # Logika respons: Bot akan merespons semua pesan yang diterimanya
+    # (baik di DM maupun di channel server)
+    user_message_cleaned = message.content # Pesan asli, tidak perlu membersihkan mention lagi
+
+    try:
+        # Di sini kamu akan memanggil API chatbotmu
+        # response_text = panggil_api_chatbot(user_message_cleaned, CHATBOT_API_KEY)
+        
+        if not user_message_cleaned: # Jika pesan kosong
+             await message.channel.send(f"Halo {message.author.mention if not is_dm else ''}! Kamu mengirim pesan kosong?".strip())
+        else:
+            # Gantilah ini dengan logika chatbotmu yang sebenarnya
+            # Pastikan CHATBOT_API_KEY sudah di-setting dengan benar di environment variables
+            if not CHATBOT_API_KEY:
+                print("Warning: CHATBOT_API_KEY tidak diset. Bot akan mengirim respons default.")
+                response_text = f"Kamu bilang: '{user_message_cleaned}'. (CHATBOT_API_KEY tidak diset, ini respons default)."
             else:
-                # Gantilah ini dengan logika chatbotmu yang sebenarnya
-                response_text = f"Kamu bilang: '{user_message_cleaned}'. Ini respons dari bot (ganti dengan logikamu)."
-                await message.channel.send(f"{message.author.mention} {response_text}")
+                # Contoh pemanggilan (sesuaikan dengan API-mu)
+                # response_text = panggil_api_chatbot(user_message_cleaned, CHATBOT_API_KEY)
+                response_text = f"Respons untuk '{user_message_cleaned}'. (Logika chatbotmu di sini)." # Respons lebih umum
 
-        except Exception as e:
-            print(f"Error saat memproses pesan: {e}")
-            await message.channel.send(f"{message.author.mention} Maaf, terjadi kesalahan saat memproses permintaanmu.")
+            await message.channel.send(f"{response_text}") # Tidak perlu mention author lagi kecuali diinginkan
+
+    except Exception as e:
+        print(f"Error saat memproses pesan: {e}")
+        await message.channel.send(f"Maaf, terjadi kesalahan saat memproses permintaanmu.")
 
 # --- Fungsi untuk memanggil API chatbotmu (CONTOH) ---
 # def panggil_api_chatbot(input_text, api_key):
