@@ -5,14 +5,16 @@ import json # Untuk debugging payload
 from collections import deque # Untuk Short-Term Memory
 from datetime import datetime # Untuk waktu
 import pytz # Untuk zona waktu
+import random # Untuk perintah acak seperti quote
 
 # --- Variabel Konfigurasi ---
 CHATBOT_API_KEY = os.environ.get("CHATBOT_API_KEY")
-DISCORD_BOT_TOKEN = os.environ.get("DISCORD_TOKEN")
+DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 GEMINI_MODEL_NAME = "gemini-1.5-flash-latest" # Pastikan ini model yang valid dan kamu punya akses
 BOT_NAME = "emma" # Nama panggilan bot, case-insensitive
 STM_MAX_MESSAGES = 10 # Jumlah pesan terakhir yang disimpan untuk konteks STM
 JAKARTA_TZ = pytz.timezone('Asia/Jakarta')
+COMMAND_PREFIX = "!" # Prefix untuk perintah bot
 
 # --- System Prompt untuk Kepribadian Emma ---
 EMMA_SYSTEM_PROMPT = f"""
@@ -70,6 +72,23 @@ Tujuan Percakapan:
 Contoh Percakapan (misalnya, pengguna bertanya "hows ur day?"):
 kamu bisa balas seperti "biasa aja sih lagi ngurusin bug rese" atau "lumayan lah abis ngegym jadi seger" atau "hm gimana ya hari ini tuh nano nano rasanya"
 """
+
+# --- Daftar Perintah Bot ---
+EMMA_COMMANDS = {
+    "help": "Nampilin daftar perintah ini nih. Biar ga bingung.",
+    "time": "Kasih tau jam berapa sekarang di Jakarta. Soalnya gue anak JKT cuy.",
+    "status": "Update singkat dari gue, lagi ngapain atau mikirin apa.",
+    "quote": "Dapet kutipan 'bijak' versi Emma. Siapa tau ngena."
+}
+
+EMMA_QUOTES = [
+    "ngoding itu kayak seni, tapi errornya lebih nyebelin dari kritik seni.",
+    "hidup itu singkat, jadi mending habisin buat hal yang seru atau... tidur.",
+    "kalo ada yang bilang lo aneh, bilang aja 'unik itu mahal, bro/sis'.",
+    "jangan takut gagal, takut tuh kalo kuota internet abis pas lagi seru-serunya.",
+    "kopi itu bukti kalo Tuhan sayang sama programmer.",
+    "kejujuran itu penting, apalagi jujur sama diri sendiri kalo lo butuh istirahat."
+]
 
 if not DISCORD_BOT_TOKEN:
     print("Error: DISCORD_TOKEN environment variable not set.")
@@ -220,6 +239,7 @@ async def on_ready():
     print(f'Bot {client.user.name} ({client.user.id}) telah online!')
     print(f"Nama panggilan yang didengarkan: {BOT_NAME}")
     print(f"Model Gemini yang digunakan: {GEMINI_MODEL_NAME}")
+    print(f"Command prefix: {COMMAND_PREFIX}{BOT_NAME}")
     # print(f"System Prompt Emma (awal): {EMMA_SYSTEM_PROMPT[:200]}...") 
     print('------')
     # Tes startup API dihilangkan sementara untuk fokus ke fungsionalitas utama
@@ -237,6 +257,49 @@ async def on_message(message):
 
     is_dm = isinstance(message.channel, discord.DMChannel)
     channel_id = str(message.channel.id) 
+
+    # Logika untuk perintah !emma
+    if message.content.lower().startswith(f"{COMMAND_PREFIX}{BOT_NAME.lower()}"):
+        parts = message.content.split()
+        command_name_full = parts[0].lower() # e.g., !emma
+        
+        actual_command = None
+        if len(parts) > 1:
+            actual_command = parts[1].lower()
+        
+        # Jika hanya "!emma" atau "!emma help"
+        if actual_command is None or actual_command == "help":
+            help_text = f"**Yo, ini daftar perintah buat gue, {BOT_NAME.capitalize()}:**\n"
+            for cmd, desc in EMMA_COMMANDS.items():
+                help_text += f"- `{COMMAND_PREFIX}{BOT_NAME.lower()} {cmd}`: {desc}\n"
+            help_text += "\nNanyain hal lain? Panggil aja nama gue (emma) di awal chat atau langsung DM gue."
+            await message.channel.send(help_text)
+            return
+
+        elif actual_command == "time":
+            time_now = get_current_jakarta_time_str()
+            await message.channel.send(f"di jakarta sekarang jam {time_now} nih, bro/sis.")
+            return
+            
+        elif actual_command == "status":
+            # Ini bisa dibuat lebih canggih, tapi untuk sekarang kita pakai respons statis dengan gaya Emma
+            statuses = [
+                "lagi ngoprek kode biar makin pinter, jangan ganggu dulu kalo ga penting-penting amat.",
+                "baru abis nge-gym, lagi seger nih otaknya. mau nanya apa?",
+                "mikirin kenapa bug lebih demen muncul pas weekend. ada teori?",
+                "lagi dengerin musik kenceng, biar semangat debug.",
+                "scroll-scroll nyari inspirasi... atau mungkin cuma prokrastinasi, hehe."
+            ]
+            await message.channel.send(random.choice(statuses))
+            return
+
+        elif actual_command == "quote":
+            await message.channel.send(f"oke nih dengerin: \"{random.choice(EMMA_QUOTES)}\" semoga mencerahkan ya.")
+            return
+            
+        else:
+            await message.channel.send(f"hm, `{actual_command}`? kayaknya itu ga ada di daftar perintah gue deh. coba ketik `{COMMAND_PREFIX}{BOT_NAME.lower()} help` buat liat yang bener.")
+            return
 
     trigger_response = False
     user_actual_input = message.content.strip()
