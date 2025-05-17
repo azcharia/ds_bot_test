@@ -1,3 +1,4 @@
 discord.py>=2.0.0 # Atau versi spesifik yang kamu gunakan
+requests # Untuk memanggil API chatbot eksternal
 # Tambahkan library lain jika kamu menggunakannya, contoh:
 # requests 
