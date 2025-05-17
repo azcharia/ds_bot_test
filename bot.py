@@ -144,19 +144,14 @@ def panggil_api_chatbot(user_input, api_key, channel_id_for_stm):
 
     chat_history = format_stm_for_gemini(channel_id_for_stm)
     
-    # Pastikan user_input adalah string
     if not isinstance(user_input, str):
         print(f"Warning: User input bukan string, mencoba konversi: {type(user_input)}")
         user_input = str(user_input)
 
-    # Sisipkan informasi waktu jika relevan
-    final_system_prompt = EMMA_SYSTEM_PROMPT # Gunakan yang lengkap dari file
+    final_system_prompt = EMMA_SYSTEM_PROMPT
     if any(keyword in user_input.lower() for keyword in ["jam berapa", "pukul berapa", "waktu sekarang"]):
         current_time_jakarta = get_current_jakarta_time_str()
         final_system_prompt = final_system_prompt.replace("[WAKTU_JAKARTA_SAAT_INI]", current_time_jakarta)
-        # Bisa juga ditambahkan ke user_input atau context jika system prompt tidak mendukung placeholder dinamis seperti ini
-        # user_input_with_time = f"{user_input} (Sebagai info, waktu saat ini di Jakarta adalah sekitar {current_time_jakarta})"
-        # print(f"Menambahkan info waktu ke input: {user_input_with_time}")
 
     payload_contents = []
     if chat_history:
@@ -168,26 +163,21 @@ def panggil_api_chatbot(user_input, api_key, channel_id_for_stm):
         "system_instruction": {
             "parts": [{"text": final_system_prompt.replace("{{user}}", "{user}")}] 
         },
-        "safety_settings": [
-            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"}, # BLOCK_MEDIUM_AND_ABOVE
-            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-        ],
-        "generation_config": { # Konfigurasi tambahan untuk kreativitas dan panjang
-            "temperature": 0.75, # Sedikit lebih kreatif
+        "generation_config": {
+            "temperature": 0.75, 
             "top_p": 0.95,
-            "max_output_tokens": 800 # Dinaikkan untuk respons yang berpotensi lebih panjang
+            "max_output_tokens": 800 
         }
     }
 
     try:
         print(f"Mengirim permintaan ke Gemini API. Input: {user_input[:50]}... Hist: {len(chat_history)}")
-        # print(f"Payload (awal): {json.dumps(payload, indent=2)[:500]}...") 
+        # Untuk debugging payload jika diperlukan nanti:
+        # import json
+        # print(f"Payload ke Gemini: {json.dumps(payload, indent=2)}")
         response = requests.post(api_url, headers=headers, json=payload, timeout=60)
-        response.raise_for_status()
+        response.raise_for_status() # Ini akan raise error untuk status 4xx/5xx
         response_data = response.json()
-        # print(f"Respons mentah dari Gemini API: {json.dumps(response_data, indent=2)[:200]}...")
 
         candidates = response_data.get("candidates")
         if candidates and len(candidates) > 0:
@@ -257,43 +247,48 @@ async def on_message(message):
 
     is_dm = isinstance(message.channel, discord.DMChannel)
     channel_id = str(message.channel.id)
-    msg_content_original = message.content # Simpan original untuk log
+    msg_content_original = message.content
     msg_content_stripped = msg_content_original.strip()
     msg_content_lower = msg_content_stripped.lower()
 
-    command_trigger = f"{COMMAND_PREFIX}{BOT_NAME.lower()}"
-    print(f"Debug: Pesan diterima: '{msg_content_original}'. Trigger: '{command_trigger}'") # DEBUG LOG
+    # Pastikan BOT_NAME juga lowercase untuk perbandingan yang konsisten
+    actual_bot_name_lower = BOT_NAME.lower()
+    command_trigger = f"{COMMAND_PREFIX}{actual_bot_name_lower}"
+    
+    print(f"Debug: Pesan diterima: '{msg_content_original}' (stripped: '{msg_content_stripped}', lower: '{msg_content_lower}')")
+    print(f"Debug: COMMAND_PREFIX = '{COMMAND_PREFIX}', BOT_NAME = '{BOT_NAME}' (lower: '{actual_bot_name_lower}')")
+    print(f"Debug: Mencocokkan dengan command_trigger: '{command_trigger}'")
 
     # Logika untuk perintah !<bot_name>
     if msg_content_lower.startswith(command_trigger):
-        print(f"Debug: Terdeteksi trigger perintah '{command_trigger}'") # DEBUG LOG
+        print(f"Debug: SUKSES terdeteksi trigger perintah '{command_trigger}' untuk pesan '{msg_content_lower}'")
         command_parts = msg_content_stripped.split()
-        # command_name_invoked = command_parts[0] # e.g. !emma atau !Emma
+        # command_name_invoked = command_parts[0] 
 
         sub_command = None
         if len(command_parts) > 1:
             sub_command = command_parts[1].lower()
         
-        print(f"Debug: Sub-perintah terdeteksi: '{sub_command}'") # DEBUG LOG
+        print(f"Debug: Sub-perintah terdeteksi: '{sub_command}'")
 
         # Menangani "!emma" (tanpa sub-perintah) atau "!emma help"
         if sub_command is None or sub_command == "help":
-            print(f"Debug: Menjalankan perintah HELP.") # DEBUG LOG
+            print(f"Debug: Menjalankan perintah HELP.")
             help_text = f"**Yo, ini daftar perintah buat gue, {BOT_NAME.capitalize()}:**\n"
             for cmd, desc in EMMA_COMMANDS.items():
-                help_text += f"- `{COMMAND_PREFIX}{BOT_NAME.lower()} {cmd}`: {desc}\n"
+                help_text += f"- `{COMMAND_PREFIX}{actual_bot_name_lower} {cmd}`: {desc}\n"
             help_text += "\nNanyain hal lain? Panggil aja nama gue (emma) di awal chat atau langsung DM gue."
             await message.channel.send(help_text)
             return
 
         elif sub_command == "time":
-            print(f"Debug: Menjalankan perintah TIME.") # DEBUG LOG
+            print(f"Debug: Menjalankan perintah TIME.")
             time_now = get_current_jakarta_time_str()
             await message.channel.send(f"di jakarta sekarang jam {time_now} nih, bro/sis.")
             return
             
         elif sub_command == "status":
-            print(f"Debug: Menjalankan perintah STATUS.") # DEBUG LOG
+            print(f"Debug: Menjalankan perintah STATUS.")
             statuses = [
                 "lagi ngoprek kode biar makin pinter, jangan ganggu dulu kalo ga penting-penting amat.",
                 "baru abis nge-gym, lagi seger nih otaknya. mau nanya apa?",
@@ -305,29 +300,38 @@ async def on_message(message):
             return
 
         elif sub_command == "quote":
-            print(f"Debug: Menjalankan perintah QUOTE.") # DEBUG LOG
+            print(f"Debug: Menjalankan perintah QUOTE.")
             await message.channel.send(f"oke nih dengerin: \"{random.choice(EMMA_QUOTES)}\" semoga mencerahkan ya.")
             return
             
         else:
-            print(f"Debug: Perintah tidak dikenali: '{sub_command}'.") # DEBUG LOG
-            await message.channel.send(f"hm, `{sub_command}`? kayaknya itu ga ada di daftar perintah gue deh. coba ketik `{COMMAND_PREFIX}{BOT_NAME.lower()} help` buat liat yang bener.")
+            print(f"Debug: Perintah tidak dikenali: '{sub_command}'.")
+            await message.channel.send(f"hm, `{sub_command}`? kayaknya itu ga ada di daftar perintah gue deh. coba ketik `{COMMAND_PREFIX}{actual_bot_name_lower} help` buat liat yang bener.")
             return
+    else:
+        print(f"Debug: GAGAL deteksi trigger '{command_trigger}'. Pesan '{msg_content_lower}' tidak dimulai dengan itu.")
 
     # Logika untuk panggilan nama atau DM (logika yang sudah ada sebelumnya)
+    # Ini hanya akan berjalan jika tidak ada perintah !emma yang cocok di atas
     trigger_response = False
     user_actual_input = msg_content_stripped 
 
     if is_dm:
+        print(f"Debug: Pesan adalah DM.")
         trigger_response = True
-    # Hanya proses panggilan nama jika BUKAN perintah !emma
-    elif msg_content_lower.startswith(BOT_NAME.lower()): 
-        rest_of_message = msg_content_stripped[len(BOT_NAME):]
+    # Hanya proses panggilan nama jika BUKAN perintah !emma (sudah dicek di atas)
+    elif msg_content_lower.startswith(actual_bot_name_lower):
+        print(f"Debug: Terdeteksi panggilan nama '{actual_bot_name_lower}'.")
+        rest_of_message = msg_content_stripped[len(actual_bot_name_lower):]
         if not rest_of_message or rest_of_message.startswith((',', ' ', ':')):
             user_actual_input = rest_of_message.lstrip(', :').strip()
             if not user_actual_input :
                 user_actual_input = "halo" 
             trigger_response = True
+        else:
+            print(f"Debug: Panggilan nama '{actual_bot_name_lower}' tapi diikuti teks lain tanpa pemisah jelas: '{rest_of_message}'")
+    else:
+        print(f"Debug: Pesan tidak terdeteksi sebagai perintah maupun panggilan nama/DM biasa: '{msg_content_stripped}'")
 
     if trigger_response:
         print(f"Pesan dari {message.author} untuk Emma (via nama/DM): '{user_actual_input}' di {'DM' if is_dm else f'channel {message.channel} server {message.guild}'}")
